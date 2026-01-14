@@ -51,6 +51,9 @@ export function DashboardClient({ user }: { user: User }) {
     notes: "",
   });
   const [algorithm, setAlgorithm] = useState<CipherAlgorithm>("vigenere");
+  const [filterAlgorithm, setFilterAlgorithm] = useState<
+    "all" | CipherAlgorithm
+  >("all");
   const [visibleModes, setVisibleModes] = useState<
     Record<string, "hidden" | "encrypted" | "decrypted">
   >({});
@@ -66,8 +69,20 @@ export function DashboardClient({ user }: { user: User }) {
       const savedAlg = localStorage.getItem(
         "passcipher_algorithm"
       ) as CipherAlgorithm | null;
-      if (savedAlg === "vigenere" || savedAlg === "vernam")
+      if (
+        savedAlg === "vigenere" ||
+        savedAlg === "vernam" ||
+        savedAlg === "hill"
+      )
         setAlgorithm(savedAlg);
+      const savedFilter = localStorage.getItem("passcipher_filter");
+      if (
+        savedFilter === "all" ||
+        savedFilter === "vigenere" ||
+        savedFilter === "vernam" ||
+        savedFilter === "hill"
+      )
+        setFilterAlgorithm(savedFilter as "all" | CipherAlgorithm);
     } catch {}
     loadPasswords();
   }, []);
@@ -246,6 +261,7 @@ export function DashboardClient({ user }: { user: User }) {
               >
                 <option value="vigenere">Vigenère</option>
                 <option value="vernam">Vernam</option>
+                <option value="hill">Hill</option>
               </select>
               <Button
                 variant="outline"
@@ -281,10 +297,30 @@ export function DashboardClient({ user }: { user: User }) {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-2xl font-bold">Your Passwords</h2>
-            <Button onClick={() => setShowForm(!showForm)} className="gap-2">
-              <Plus className="w-4 h-4" />
-              Add Password
-            </Button>
+            <div className="flex items-center gap-3">
+              <select
+                className="border bg-input border-border/50 rounded-md px-3 py-2 text-sm"
+                value={filterAlgorithm}
+                onChange={(e) => {
+                  const v = e.target.value as "all" | CipherAlgorithm;
+                  setFilterAlgorithm(v);
+                  try {
+                    localStorage.setItem("passcipher_filter", v);
+                  } catch {}
+                }}
+                title="Filter by cipher algorithm"
+              >
+                <option value="all">All</option>
+                <option value="vigenere">Vigenère</option>
+                <option value="vernam">Vernam</option>
+                <option value="hill">Hill</option>
+              </select>
+
+              <Button onClick={() => setShowForm(!showForm)} className="gap-2">
+                <Plus className="w-4 h-4" />
+                Add Password
+              </Button>
+            </div>
           </div>
 
           {/* Add Password Form */}
@@ -398,145 +434,153 @@ export function DashboardClient({ user }: { user: User }) {
             </Card>
           ) : (
             <div className="grid gap-4">
-              {passwords.map((pwd) => (
-                <Card
-                  key={pwd.id}
-                  className="border-border/50 bg-card/50 backdrop-blur hover:border-primary/50 transition-colors"
-                >
-                  <CardContent className="pt-6">
-                    <div className="space-y-4">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-lg">
-                            {pwd.service_name}
-                          </h3>
-                          <p className="text-sm text-muted-foreground">
-                            {pwd.username}
-                          </p>
-                          {pwd.website_url && (
-                            <a
-                              href={pwd.website_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-sm text-primary hover:underline"
-                            >
-                              {pwd.website_url}
-                            </a>
-                          )}
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeletePassword(pwd.id)}
-                          className="text-destructive hover:text-destructive"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-
-                      <div className="bg-background/50 rounded-lg p-3">
-                        <div className="flex items-center gap-2 mb-2">
-                          <div className="inline-flex rounded-md border border-border/50 overflow-hidden">
-                            <button
-                              className={`px-3 py-1 text-sm ${
-                                !visibleModes[pwd.id] ||
-                                visibleModes[pwd.id] === "hidden"
-                                  ? "bg-primary text-primary-foreground"
-                                  : "bg-background"
-                              }`}
-                              onClick={() =>
-                                setVisibilityMode(pwd.id, "hidden")
-                              }
-                            >
-                              Hidden
-                            </button>
-                            <button
-                              className={`px-3 py-1 text-sm ${
-                                visibleModes[pwd.id] === "encrypted"
-                                  ? "bg-primary text-primary-foreground"
-                                  : "bg-background"
-                              }`}
-                              onClick={() =>
-                                setVisibilityMode(pwd.id, "encrypted")
-                              }
-                            >
-                              Encrypted
-                            </button>
-                            <button
-                              className={`px-3 py-1 text-sm ${
-                                visibleModes[pwd.id] === "decrypted"
-                                  ? "bg-primary text-primary-foreground"
-                                  : "bg-background"
-                              }`}
-                              onClick={() =>
-                                setVisibilityMode(pwd.id, "decrypted")
-                              }
-                            >
-                              Decrypted
-                            </button>
-                          </div>
-                        </div>
-                        <div className="flex items-center justify-between">
+              {passwords
+                .filter((pwd) => {
+                  if (filterAlgorithm === "all") return true;
+                  return (
+                    PasswordCipher.detectAlgorithm(pwd.encrypted_password) ===
+                    filterAlgorithm
+                  );
+                })
+                .map((pwd) => (
+                  <Card
+                    key={pwd.id}
+                    className="border-border/50 bg-card/50 backdrop-blur hover:border-primary/50 transition-colors"
+                  >
+                    <CardContent className="pt-6">
+                      <div className="space-y-4">
+                        <div className="flex items-start justify-between">
                           <div className="flex-1">
-                            {(!visibleModes[pwd.id] ||
-                              visibleModes[pwd.id] === "hidden") && (
-                              <code className="text-sm font-mono">
-                                ••••••••
-                              </code>
-                            )}
-                            {visibleModes[pwd.id] === "encrypted" && (
-                              <code className="text-sm font-mono break-all">
-                                {pwd.encrypted_password}
-                              </code>
-                            )}
-                            {visibleModes[pwd.id] === "decrypted" && (
-                              <code className="text-sm font-mono break-all">
-                                {decryptPassword(pwd.encrypted_password)}
-                              </code>
+                            <h3 className="font-semibold text-lg">
+                              {pwd.service_name}
+                            </h3>
+                            <p className="text-sm text-muted-foreground">
+                              {pwd.username}
+                            </p>
+                            {pwd.website_url && (
+                              <a
+                                href={pwd.website_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-sm text-primary hover:underline"
+                              >
+                                {pwd.website_url}
+                              </a>
                             )}
                           </div>
-                          <div className="flex gap-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                const content =
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeletePassword(pwd.id)}
+                            className="text-destructive hover:text-destructive"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+
+                        <div className="bg-background/50 rounded-lg p-3">
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className="inline-flex rounded-md border border-border/50 overflow-hidden">
+                              <button
+                                className={`px-3 py-1 text-sm ${
+                                  !visibleModes[pwd.id] ||
+                                  visibleModes[pwd.id] === "hidden"
+                                    ? "bg-primary text-primary-foreground"
+                                    : "bg-background"
+                                }`}
+                                onClick={() =>
+                                  setVisibilityMode(pwd.id, "hidden")
+                                }
+                              >
+                                Hidden
+                              </button>
+                              <button
+                                className={`px-3 py-1 text-sm ${
                                   visibleModes[pwd.id] === "encrypted"
-                                    ? pwd.encrypted_password
-                                    : decryptPassword(pwd.encrypted_password);
-                                copyToClipboard(
-                                  content,
-                                  pwd.id,
-                                  visibleModes[pwd.id] === "encrypted"
-                                    ? "encrypted"
-                                    : "decrypted"
-                                );
-                              }}
-                              disabled={
-                                !visibleModes[pwd.id] ||
-                                visibleModes[pwd.id] === "hidden"
-                              }
-                              title="Copy"
-                            >
-                              {copiedKey?.startsWith(`${pwd.id}:`) ? (
-                                <Check className="w-4 h-4 text-primary" />
-                              ) : (
-                                <Copy className="w-4 h-4" />
+                                    ? "bg-primary text-primary-foreground"
+                                    : "bg-background"
+                                }`}
+                                onClick={() =>
+                                  setVisibilityMode(pwd.id, "encrypted")
+                                }
+                              >
+                                Encrypted
+                              </button>
+                              <button
+                                className={`px-3 py-1 text-sm ${
+                                  visibleModes[pwd.id] === "decrypted"
+                                    ? "bg-primary text-primary-foreground"
+                                    : "bg-background"
+                                }`}
+                                onClick={() =>
+                                  setVisibilityMode(pwd.id, "decrypted")
+                                }
+                              >
+                                Decrypted
+                              </button>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              {(!visibleModes[pwd.id] ||
+                                visibleModes[pwd.id] === "hidden") && (
+                                <code className="text-sm font-mono">
+                                  ••••••••
+                                </code>
                               )}
-                            </Button>
+                              {visibleModes[pwd.id] === "encrypted" && (
+                                <code className="text-sm font-mono break-all">
+                                  {pwd.encrypted_password}
+                                </code>
+                              )}
+                              {visibleModes[pwd.id] === "decrypted" && (
+                                <code className="text-sm font-mono break-all">
+                                  {decryptPassword(pwd.encrypted_password)}
+                                </code>
+                              )}
+                            </div>
+                            <div className="flex gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  const content =
+                                    visibleModes[pwd.id] === "encrypted"
+                                      ? pwd.encrypted_password
+                                      : decryptPassword(pwd.encrypted_password);
+                                  copyToClipboard(
+                                    content,
+                                    pwd.id,
+                                    visibleModes[pwd.id] === "encrypted"
+                                      ? "encrypted"
+                                      : "decrypted"
+                                  );
+                                }}
+                                disabled={
+                                  !visibleModes[pwd.id] ||
+                                  visibleModes[pwd.id] === "hidden"
+                                }
+                                title="Copy"
+                              >
+                                {copiedKey?.startsWith(`${pwd.id}:`) ? (
+                                  <Check className="w-4 h-4 text-primary" />
+                                ) : (
+                                  <Copy className="w-4 h-4" />
+                                )}
+                              </Button>
+                            </div>
                           </div>
                         </div>
-                      </div>
 
-                      {pwd.notes && (
-                        <p className="text-sm text-muted-foreground italic">
-                          Note: {pwd.notes}
-                        </p>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                        {pwd.notes && (
+                          <p className="text-sm text-muted-foreground italic">
+                            Note: {pwd.notes}
+                          </p>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
             </div>
           )}
         </div>
